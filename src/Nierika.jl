@@ -1,19 +1,24 @@
 module Nierika
 
-using NullableArrays
+# using NullableArrays
 
-export  Index,
-        Table,
-        @Table,
-        Field,
-        Col,
-        getrow
+export  DB, Stmt, Cursor, Table,
 
+        # methods
+        colnames,
+        query,
+        reset!,
+        results,
+        step!,
+        where
 
-include("tables.jl")
-include("indexing.jl")
-include("primitives.jl")
+include("../deps/deps.jl")
+include("SQLite_consts.jl")
+include("SQLite_utils.jl")
+include("SQLite_api.jl")
+include("db.jl")
 include("cursor.jl")
-include("formula.jl")
+include("table.jl")
+include("show.jl")
 
 end # module
