@@ -1,35 +1,63 @@
-type Cursor{T<:Tuple} <: IO
+type Cursor <: IO
     stmt::Stmt
-    ncols::Int
-    cols::Vector{UTF8String}
+    colnames::Vector{UTF8String}
+    coltypes::Vector{DataType}
     status::Cint
     where::String
+
+    function Cursor(stmt::Stmt, where::String="")
+        status = Nierika.execute!(stmt)
+        ncols::Int = sqlite3_column_count(stmt.handle)
+        colnames = _colnames(stmt, ncols)
+        coltypes = _coltypes(stmt, ncols)
+        return new(stmt, colnames, coltypes, status, where)
+    end
 end
 
-function Cursor(stmt::Stmt, where::String="")
-    status = Nierika.execute!(stmt)
-    ncols::Int = sqlite3_column_count(stmt.handle)
-    types = coltypes(stmt, ncols)
-    cols = colnames(stmt, ncols)
-    return Cursor{types}(stmt, ncols, cols, status, where)
+immutable ColName{T}
+    idx::Int
+    colname::UTF8String
 end
 
-function colnames(curs::Cursor)
-    n = curs.ncols
+function env(curs::Cursor)
+    # colinds = Vector{ColName}()
+    for (i, colname) in enumerate(curs.colnames)
+        typ = curs.coltypes[i]
+        current = current_module()
+        eval(current, :( global const $(symbol(colname)) = Nierika.ColName{$typ}($i, $colname) ))
+        # eval(current, :( global const $(symbol(colname)) = Nierika.ColName{$typ}($i) ))
+        # push!(colinds, ColName{typ}(i))
+    end
+    # return colinds
+end
+
+function env(colnames, coltypes)
+    for (i, colname) in enumerate(colnames)
+        typ = coltypes[i]
+        current = current_module()
+        eval(current, :( global const $(symbol(colname)) = Nierika.ColName{$typ}($i, $colname) ))
+    end
+end
+
+ncols(curs::Cursor) = length(curs.colnames)
+
+function _colnames(curs::Cursor)
+    n = ncols(curs)
     colnames = [ utf8(sqlite3_column_name(curs.stmt.handle, i-1)) for i in 1:n ]
 end
 
-function colnames(stmt::Stmt, ncols=sqlite3_column_count(stmt.handle))
+function _colnames(stmt::Stmt, ncols=sqlite3_column_count(stmt.handle))
     colnames = [ utf8(sqlite3_column_name(stmt.handle, i-1)) for i in 1:ncols ]
 end
 
-function coltypes(stmt::Stmt, ncols::Int)
+function _coltypes(stmt::Stmt, ncols::Int)
     types = Array{DataType, 1}()
     for i in 1:ncols
         typ = sqlite3_types[sqlite3_column_type(stmt.handle, i-1)]
-        push!(types, Vector{typ})
+        # push!(types, Vector{typ})
+        push!(types, typ)
     end
-    return Tuple{types...}
+    return types
 end
 
 Base.close(curs::Cursor) = close(curs.stmt)
@@ -41,10 +69,11 @@ end
 
 function Base.readline(curs::Cursor, delim::Union{Char,ByteString}=", ", buf::IOBuffer=IOBuffer())
     eof(curs) && return ""
-    for i = 1:curs.ncols
+    n = ncols(curs)
+    for i = 1:n
         val = sqlite3_column_text(curs.stmt.handle, i-1)
         val != C_NULL && write(buf, bytestring(val))
-        write(buf, ifelse(i == curs.ncols, '\n', delim))
+        write(buf, ifelse(i == n, '\n', delim))
     end
     # curs.status = sqlite3_step(curs.stmt.handle)
     return takebuf_string(buf)
@@ -61,11 +90,12 @@ function query(sql::String)
 end
 
 function restof(curs::Cursor; delim=',', buf::IOBuffer=IOBuffer())
+    n = ncols(curs)
     while curs.status == 100
-        for i = 1:curs.ncols
+        for i = 1:n
             val = sqlite3_column_text(curs.stmt.handle, i-1)
             val != C_NULL && write(buf, bytestring(val))
-            write(buf, ifelse(i == curs.ncols, '\n', delim))
+            write(buf, ifelse(i == n, '\n', delim))
         end
         step!(curs)
     end
@@ -93,7 +123,7 @@ let safe, buf
     where_buf = IOBuffer()
 
     global select
-    function Base.select(f, db::DB, table::String; sel::String="*")
+    function Base.select(f, db::DB, table::String, sel::String="*")
         safe = true
         write(buf, "select $sel from $table")
         f()
@@ -105,9 +135,27 @@ let safe, buf
         # println(sql)
     end
 
+    function Base.select(f, db::DB, table::String, selection::Vararg{ColName})
+        safe = true
+        colnames = [ "$(col.colname), " for col in selection ]
+        length(selection) == 0 ? _selection = "*" :
+                                 _selection = "$(colnames...)"
+        write(buf, "SELECT $_selection FROM $table")
+        f()
+        _where = takebuf_string(where_buf)
+        write(buf, _where)
+        sql = takebuf_string(buf)
+        safe = false
+        return Cursor(Stmt(db, sql, table), _where)
+    end
+
     global where
     function where(sql::String)
         safe == true || error()
         write(where_buf, " where $sql")
     end
+end
+
+function Base.(:>)(col::ColName, x::Any)
+    return "$(col.colname) > $x"
 end

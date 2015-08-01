@@ -6,6 +6,7 @@ export  DB, Stmt, Cursor, Table,
 
         # methods
         colnames,
+        nrows,
         query,
         reset!,
         results,

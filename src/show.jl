@@ -23,7 +23,7 @@ end
 function Base.summary(tab::Table)
     dims = Base.dims2string(size(tab))
     colnames = get_colnames(tab.colnames)
-    return "$dims Table with columns $colnames"
+    return "$dims Table with columns\n$colnames"
 end
 
 function Base.show(io::IO, tab::Table)
