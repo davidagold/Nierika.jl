@@ -14,30 +14,13 @@ type Cursor <: IO
     end
 end
 
-immutable ColName{T}
-    idx::Int
-    colname::UTF8String
-end
-
-function env(curs::Cursor)
-    # colinds = Vector{ColName}()
-    for (i, colname) in enumerate(curs.colnames)
-        typ = curs.coltypes[i]
-        current = current_module()
-        eval(current, :( global const $(symbol(colname)) = Nierika.ColName{$typ}($i, $colname) ))
-        # eval(current, :( global const $(symbol(colname)) = Nierika.ColName{$typ}($i) ))
-        # push!(colinds, ColName{typ}(i))
-    end
-    # return colinds
-end
-
-function env(colnames, coltypes)
-    for (i, colname) in enumerate(colnames)
-        typ = coltypes[i]
-        current = current_module()
-        eval(current, :( global const $(symbol(colname)) = Nierika.ColName{$typ}($i, $colname) ))
-    end
-end
+# function env(colnames, coltypes)
+#     for (i, colname) in enumerate(colnames)
+#         typ = coltypes[i]
+#         current = current_module()
+#         eval(current, :( global const $(symbol(colname)) = Nierika.ColName{$typ}($i, $colname) ))
+#     end
+# end
 
 ncols(curs::Cursor) = length(curs.colnames)
 
@@ -123,30 +106,30 @@ let safe, buf
     where_buf = IOBuffer()
 
     global select
+    # function Base.select(f, db::DB, table::String, sel::String="*")
+    #     safe = true
+    #     write(buf, "select $sel from $table")
+    #     f()
+    #     _where = takebuf_string(where_buf)
+    #     write(buf, _where)
+    #     sql = takebuf_string(buf)
+    #     safe = false
+    #     return Cursor(Stmt(db, sql, table), _where)
+    #     # println(sql)
+    # end
+
     function Base.select(f, db::DB, table::String, sel::String="*")
         safe = true
-        write(buf, "select $sel from $table")
-        f()
-        _where = takebuf_string(where_buf)
-        write(buf, _where)
-        sql = takebuf_string(buf)
+        select_sql = "SELECT $sel FROM $table"
+        ast = Base.uncompressed_ast(f.code)
+        e = ast.args[3]
+        # dump(e.args[2])
+        where_args = []
+        _where = take_where(e, where_args)[1][1] |> string
+        where_sql = " WHERE $_where"
+        res_sql = select_sql * where_sql
         safe = false
-        return Cursor(Stmt(db, sql, table), _where)
-        # println(sql)
-    end
-
-    function Base.select(f, db::DB, table::String, selection::Vararg{ColName})
-        safe = true
-        colnames = [ "$(col.colname), " for col in selection ]
-        length(selection) == 0 ? _selection = "*" :
-                                 _selection = "$(colnames...)"
-        write(buf, "SELECT $_selection FROM $table")
-        f()
-        _where = takebuf_string(where_buf)
-        write(buf, _where)
-        sql = takebuf_string(buf)
-        safe = false
-        return Cursor(Stmt(db, sql, table), _where)
+        return Cursor(Stmt(db, res_sql), where_sql)
     end
 
     global where
@@ -156,6 +139,29 @@ let safe, buf
     end
 end
 
-function Base.(:>)(col::ColName, x::Any)
-    return "$(col.colname) > $x"
+take_where(e) = nothing
+function take_where(e::Expr, where_args)
+    if e.head == :call
+        if isa(e.args[1], GlobalRef) && e.args[1].name == :where
+            push!(where_args, [ de_global(arg) for arg in e.args[2:end] ])
+        end
+    elseif e.head == :line
+    else
+        for arg in e.args
+            take_where(arg, where_args)
+        end
+    end
+    return where_args
 end
+
+de_global(e) = e
+de_global(g::GlobalRef) = g.name
+function de_global(e::Expr)
+    return Expr(e.head, [ de_global(arg) for arg in e.args ]...)
+end
+
+# function parse_where(e::Expr)
+#     if e.head == :comparison
+#
+#
+# end

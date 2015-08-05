@@ -2,15 +2,17 @@ module Nierika
 
 # using NullableArrays
 
-export  DB, Stmt, Cursor, Table,
+export  DB, Stmt, Cursor, Table, Column,
 
         # methods
         colnames,
+        getblob,
         nrows,
         query,
         reset!,
         results,
         step!,
+        with,
         where
 
 include("../deps/deps.jl")
