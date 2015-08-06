@@ -133,16 +133,16 @@ end
 
 # "environment reification"
 
-function with(f::Function, tab::Table)
+function with(f::Function, tab::Table, args...)
     env_id[1] = tab.id
-    res = f()
+    res = f(args...)
     env_id[1] = safety_id
     return res
 end
 
-function with(tab::Table, f)
+function with(tab::Table, f, args...)
     env_id[1] = tab.id
-    res = f()
+    res = f(args...)
     env_id[1] = safety_id
     return res
 end
