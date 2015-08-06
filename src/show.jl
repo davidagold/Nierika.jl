@@ -1,5 +1,5 @@
 function Base.summary(curs::Cursor)
-    colnames = get_colnames(curs.colnames)
+    colnames = gen_colnames(curs.colnames)
     res = "Cursor with columns $colnames"
 end
 
