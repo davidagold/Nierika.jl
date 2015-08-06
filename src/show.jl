@@ -3,7 +3,7 @@ function Base.summary(curs::Cursor)
     res = "Cursor with columns $colnames"
 end
 
-function get_colnames(colnames::Vector{UTF8String})
+function gen_colnames{S<:String}(colnames::Vector{S})
     n = length(colnames)
     res = "("
     for i in eachindex(colnames)
@@ -22,8 +22,9 @@ end
 
 function Base.summary(tab::Table)
     dims = Base.dims2string(size(tab))
-    colnames = [ column.colname for column in tab.columns ]
-    return "$dims Table with columns\n$colnames"
+    colstrings = [ string(col[1]) for col in tab.columns ]
+    colnames = gen_colnames(colstrings)
+    return "$dims Table with columns\n $colnames"
 end
 
 function Base.show(io::IO, tab::Table)
@@ -33,5 +34,4 @@ end
 
 function Base.show{T}(io::IO, column::Column{T})
     print(io, "Column{$T}")
-    # Base.showlimited(io, column.col)
 end
