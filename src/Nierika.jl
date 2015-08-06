@@ -21,6 +21,7 @@ include("SQLite_utils.jl")
 include("SQLite_api.jl")
 include("db.jl")
 include("cursor.jl")
+include("query.jl")
 include("table.jl")
 include("show.jl")
 
