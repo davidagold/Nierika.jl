@@ -218,3 +218,13 @@ julia> @time with(tab, f, 1)
   0.000006 seconds (5 allocations: 176 bytes)
 6.20841020470337
 ```
+
+### Discussion of `Table` design
+
+I have thus far identified primary disadvantages of the above design for an in-memory Julia table type:
+
+1. The scheme relies on assigning names in the caller's global namespace (by means of `eval`, though I don't think the use of `eval` per se is necessarily objectionable here).
+2. Storing columnar data across disparate objects may worsen performance for row-oriented operations due to issues of memory layout.
+3. Different tabular data sets can be represented in the same global namespace as `Table`s only if columns with shared names contain elements of a common type.
+
+I don't know whether or not the above outweigh the advantages of the scheme, i.e. type-certain column-based indexing and environment reification. I believe that the largest drawback is number 1 above. Number 2 is important, but there has been talk of offering a distinct type that would be better suited to row-based operations. If such a type were implemented, then it would be reasonable to sacrifice row-oriented performance in a column-oriented data type if the advantages were considerable. Number 3 seems like it ought to be fairly easy to accommodate in practice. I would further argue (at least prima facie) that if columns from distinct tables carry distinct enough information such that the element types of the columns are distinct, then one is probably better off selecting different names for the columns in any case.
